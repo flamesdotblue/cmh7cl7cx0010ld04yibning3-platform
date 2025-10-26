@@ -14,7 +14,6 @@ function analyzeImage(img) {
   canvas.width = w; canvas.height = h;
   ctx.drawImage(img, 0, 0);
   const { data } = ctx.getImageData(0, 0, w, h);
-  // downsample for speed
   let r=0,g=0,b=0,count=0;
   const step = Math.max(1, Math.floor((w*h)/20000));
   for (let i=0; i<data.length; i += 4*step) {
@@ -34,7 +33,6 @@ function generateGhibli(canvas) {
   const w = canvas.width = canvas.clientWidth;
   const h = canvas.height = canvas.clientHeight;
 
-  // Sky gradient
   const sky = ctx.createLinearGradient(0, 0, 0, h);
   sky.addColorStop(0, '#4f46e5');
   sky.addColorStop(0.5, '#7c3aed');
@@ -42,14 +40,12 @@ function generateGhibli(canvas) {
   ctx.fillStyle = sky;
   ctx.fillRect(0,0,w,h);
 
-  // Sun/Moon glow
   const cx = w*0.75, cy = h*0.25, r = Math.min(w,h)*0.18;
   const rad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   rad.addColorStop(0, 'rgba(255,255,220,0.9)');
   rad.addColorStop(1, 'rgba(255,255,220,0)');
   ctx.fillStyle = rad; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
 
-  // Mountains layers
   function mountain(yBase, color, roughness=0.008, amplitude=40) {
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.moveTo(0,h);
@@ -63,7 +59,6 @@ function generateGhibli(canvas) {
   mountain(h*0.8, 'rgba(10,10,30,0.8)', 0.013, 40);
   mountain(h*0.9, 'rgba(5,5,20,0.9)', 0.016, 50);
 
-  // Foliage silhouettes
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   for (let i=0; i<40; i++) {
     const x = Math.random()*w;
@@ -80,7 +75,7 @@ function generateGhibli(canvas) {
 function generateLogoSVG(text, palette) {
   const colors = palette?.length ? palette : ['#6c5ce7','#00d2d3','#f368e0'];
   const safeText = (text || 'Aether').slice(0, 24);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">\n  <defs>\n    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">\n      <stop offset="0%" stop-color="${colors[0]}"/>\n      <stop offset="50%" stop-color="${colors[1 % colors.length]}"/>\n      <stop offset="100%" stop-color="${colors[2 % colors.length]}"/>\n    </linearGradient>\n  </defs>\n  <rect width="100%" height="100%" fill="#0b0b12"/>\n  <g transform="translate(320,180)">\n    <circle r="80" fill="url(#g)" opacity="0.9"/>\n    <rect x="-120" y="-20" width="240" height="40" rx="20" fill="none" stroke="url(#g)" stroke-width="6"/>\n    <g transform="translate(0,0)">\n      <text x="0" y="8" text-anchor="middle" fill="#ffffff" font-family="Inter, system-ui" font-size="28" font-weight="700">${safeText}</text>\n    </g>\n  </g>\n</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"360\" viewBox=\"0 0 640 360\">\n  <defs>\n    <linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\">\n      <stop offset=\"0%\" stop-color=\"${colors[0]}\"/>\n      <stop offset=\"50%\" stop-color=\"${colors[1 % colors.length]}\"/>\n      <stop offset=\"100%\" stop-color=\"${colors[2 % colors.length]}\"/>\n    </linearGradient>\n  </defs>\n  <rect width=\"100%\" height=\"100%\" fill=\"#0b0b12\"/>\n  <g transform=\"translate(320,180)\">\n    <circle r=\"80\" fill=\"url(#g)\" opacity=\"0.9\"/>\n    <rect x=\"-120\" y=\"-20\" width=\"240\" height=\"40\" rx=\"20\" fill=\"none\" stroke=\"url(#g)\" stroke-width=\"6\"/>\n    <g transform=\"translate(0,0)\">\n      <text x=\"0\" y=\"8\" text-anchor=\"middle\" fill=\"#ffffff\" font-family=\"Inter, system-ui\" font-size=\"28\" font-weight=\"700\">${safeText}</text>\n    </g>\n  </g>\n</svg>`;
 }
 
 export default function ImageLab({ onLogAdded }) {
@@ -88,7 +83,11 @@ export default function ImageLab({ onLogAdded }) {
   const [imgUrl, setImgUrl] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [logoText, setLogoText] = useState('Aether Agents');
+  const [caption, setCaption] = useState('');
+  const [loadingCaption, setLoadingCaption] = useState(false);
+  const [capErr, setCapErr] = useState('');
   const canvasRef = useRef(null);
+  const imgElRef = useRef(null);
 
   useEffect(() => {
     if (!imgUrl) return;
@@ -106,6 +105,8 @@ export default function ImageLab({ onLogAdded }) {
 
   const handleFile = (f) => {
     if (!f) return;
+    setCaption('');
+    setCapErr('');
     setFile(f);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -134,6 +135,25 @@ export default function ImageLab({ onLogAdded }) {
     onLogAdded?.();
   };
 
+  const handleCaption = async () => {
+    if (!imgElRef.current) return;
+    setLoadingCaption(true);
+    setCapErr('');
+    try {
+      const { pipeline } = await import('@xenova/transformers');
+      const captioner = await pipeline('image-to-text', 'Xenova/blip-image-captioning-base');
+      const out = await captioner(imgElRef.current);
+      const text = Array.isArray(out) ? (out[0]?.generated_text || '') : (out?.generated_text || '');
+      setCaption(text);
+      addLog({ type: 'image-caption', prompt: 'caption image', response: text });
+      onLogAdded?.();
+    } catch (e) {
+      setCapErr((e && e.message) || 'Failed to caption image.');
+    } finally {
+      setLoadingCaption(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-4">
@@ -147,11 +167,16 @@ export default function ImageLab({ onLogAdded }) {
           </div>
           {imgUrl && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-              <img src={imgUrl} alt="uploaded" className="w-full rounded-lg border border-white/10" />
+              <img ref={imgElRef} src={imgUrl} alt="uploaded" className="w-full rounded-lg border border-white/10" />
               <div className="text-sm text-white/80 space-y-2">
                 <div>Dimensions: {analysis?.width} × {analysis?.height}</div>
                 <div className="flex items-center gap-2">Avg Color: <span className="inline-block w-5 h-5 rounded" style={{ background: avgHex }} /> <code className="text-white/60">{avgHex}</code></div>
                 <div>Est. Luminance: {analysis?.luminance}</div>
+                <div className="pt-2 border-t border-white/10">
+                  <button onClick={handleCaption} disabled={loadingCaption} className="px-3 py-1.5 rounded-md bg-white text-black hover:bg-gray-100 disabled:opacity-60">{loadingCaption ? 'Captioning…' : 'Caption Image'}</button>
+                  {caption && <div className="mt-2 text-white/90">“{caption}”</div>}
+                  {capErr && <div className="mt-2 text-red-300 text-xs">{capErr}</div>}
+                </div>
               </div>
             </div>
           )}

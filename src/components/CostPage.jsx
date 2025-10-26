@@ -56,7 +56,7 @@ export default function CostPage({ totalCost }) {
 
       <div className="rounded-xl border border-white/10 p-5 bg-white/5">
         <div className="font-medium mb-1">Notes</div>
-        <p className="text-sm text-white/70">This is a local-first demo with a toy reasoning engine and graphics generation. All data stays in your browser. Costs represent simulated local compute credits, not real billing.</p>
+        <p className="text-sm text-white/70">This app uses a browser-run LLM (optional) and image captioning model. All data stays local. Costs are simulated based on text length.</p>
       </div>
     </div>
   );

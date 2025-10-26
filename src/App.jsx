@@ -108,7 +108,7 @@ export default function App() {
       </main>
 
       <footer className="border-t border-white/10 mt-10">
-        <div className="max-w-7xl mx-auto px-4 py-6 text-sm text-white/60">Built with Next-gen local-first ideas. No API keys; compute runs in your browser.</div>
+        <div className="max-w-7xl mx-auto px-4 py-6 text-sm text-white/60">Built with local-first ideas. No API keys; compute runs in your browser.</div>
       </footer>
     </div>
   );
